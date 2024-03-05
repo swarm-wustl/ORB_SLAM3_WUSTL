@@ -20,14 +20,14 @@ find_package(Eigen3 REQUIRED)
 find_package(Pangolin REQUIRED)
 
 include_directories(
-  ~/Dev/ORB_SLAM3/include
-  ~/Dev/ORB_SLAM3/include/CameraModels
-  ~/Dev/ORB_SLAM3/include/ThirdParty/Sophus
-  ~/Dev/ORB_SLAM3/ThirdParty/Sophus
-  ~/Dev/ORB_SLAM3/ThirdParty/DBoW2/DBoW2
-  ~/Dev/ORB_SLAM3/ThirdParty/DBoW2
-  ~/Dev/ORB_SLAM3/ThirdParty
-  ~/Dev/ORB_SLAM3/
+  ORB_SLAM3/include
+  ORB_SLAM3/include/CameraModels
+  ORB_SLAM3/include/ThirdParty/Sophus
+  ORB_SLAM3/ThirdParty/Sophus
+  ORB_SLAM3/ThirdParty/DBoW2/DBoW2
+  ORB_SLAM3/ThirdParty/DBoW2
+  ORB_SLAM3/ThirdParty
+  ORB_SLAM3/
   ${EIGEN3_INCLUDE_DIR}
   ${Pangolin_INCLUDE_DIRS}
 )
@@ -58,7 +58,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
 rosidl_get_typesupport_target(cpp_typesupport_target ${PROJECT_NAME} "rosidl_typesupport_cpp")
 
 link_directories(
-  ~/Dev/ORB_SLAM3/Thirdparty/Pangolin/build
+  ORB_SLAM3/Thirdparty/Pangolin/build
 )
 
 target_link_libraries(system
@@ -66,9 +66,9 @@ target_link_libraries(system
   ${OpenCV_LIBS}
   ${EIGEN3_LIBS}
   ${Pangolin_LIBRARIES}
-  ~/Dev/ORB_SLAM3/Thirdparty/DBoW2/lib/libDBoW2.so
-  ~/Dev/ORB_SLAM3/Thirdparty/g2o/lib/libg2o.so
-  ~/Dev/ORB_SLAM3/lib/libORB_SLAM3.so
+  ORB_SLAM3/Thirdparty/DBoW2/lib/libDBoW2.so
+  ORB_SLAM3/Thirdparty/g2o/lib/libg2o.so
+  ORB_SLAM3/lib/libORB_SLAM3.so
   -lboost_system
   -lboost_serialization
   -lcrypto
@@ -95,3 +95,4 @@ install(TARGETS
   DESTINATION lib/${PROJECT_NAME})
 
 ament_package()
+
