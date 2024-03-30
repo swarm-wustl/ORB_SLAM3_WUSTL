@@ -10,6 +10,7 @@
 #include "vslam/msg/map.hpp"
 #include "vslam/msg/key_frame.hpp"
 #include "vslam/msg/map_point.hpp"
+#include "vslam/msg/stereo_image.hpp"
 
 #include "image_transport/image_transport.hpp"
 #include <cv_bridge/cv_bridge.h>
@@ -50,7 +51,8 @@ class VSLAMSystemNode : public rclcpp::Node {
     const string OPENCV_WINDOW = "Camera Feed";
     chrono::time_point<chrono::high_resolution_clock> last_callback;
 
-    image_transport::Subscriber image_sub_;
+    image_transport::Subscriber mono_image_sub_;
+    rclcpp::Subscription<vslam::msg::StereoImage>::SharedPtr stereo_image_sub_;
     rclcpp::Publisher<vslam::msg::Map>::SharedPtr map_publisher_;
 
     ORB_SLAM3::System* SLAM;
@@ -141,6 +143,41 @@ class VSLAMSystemNode : public rclcpp::Node {
       cv::waitKey(3);
     }
 
+    void stereoCallback(const vslam::msg::StereoImage::SharedPtr msg) {
+      throttleCallback(last_callback);
+
+      cv_bridge::CvImagePtr cv_ptr_l;
+      cv_bridge::CvImagePtr cv_ptr_r;
+      try {
+        cv_ptr_l = cv_bridge::toCvCopy(msg->left_image, msg->left_image.encoding);
+        cv_ptr_r = cv_bridge::toCvCopy(msg->right_image, msg->right_image.encoding);
+      } catch (cv_bridge::Exception& e) {
+        cerr << "cv_bridge exception: " << e.what() << endl;
+        return;
+      }
+
+      cv_ptr_l->image.empty(); // required to prevent segfault
+      cv_ptr_r->image.empty(); // required to prevent segfault
+
+      processImage(cv_ptr_l->image);
+      processImage(cv_ptr_r->image);
+
+      RCLCPP_INFO(this->get_logger(), "%d, %d", cv_ptr_l->image.rows, cv_ptr_r->image.rows);
+
+      double tframe = msg->header.stamp.sec + msg->header.stamp.nanosec / 1000000000.0;
+      Sophus::SE3f pose = SLAM->TrackStereo(cv_ptr_l->image, cv_ptr_r->image, tframe);
+
+      publishMap(pose);
+
+      // Display side by side images
+      cv::Mat combined(cv_ptr_l->image.rows, cv_ptr_l->image.cols*2, cv_ptr_l->image.type());
+      cv_ptr_l->image.copyTo(combined(cv::Rect(0, 0, cv_ptr_l->image.cols, cv_ptr_l->image.rows)));
+      cv_ptr_r->image.copyTo(combined(cv::Rect(cv_ptr_l->image.cols, 0, cv_ptr_r->image.cols, cv_ptr_r->image.rows)));
+
+      cv::imshow(OPENCV_WINDOW, combined);
+      cv::waitKey(3);
+    }
+
   public:
     VSLAMSystemNode() : Node("vslam_system_node")
   {
@@ -156,19 +193,28 @@ class VSLAMSystemNode : public rclcpp::Node {
     display_visual_param_desc.description = "Display the visual output of the SLAM system";
     this->declare_parameter<bool>("display_visual", true, display_visual_param_desc);
 
-    auto video_topic_param_desc = rcl_interfaces::msg::ParameterDescriptor{};
-    video_topic_param_desc.description = "Name of the topic to subscribe to for the video feed";
-    this->declare_parameter<string>("video_topic", "camera/image_raw", video_topic_param_desc);
+    auto mono_video_topic_param_desc = rcl_interfaces::msg::ParameterDescriptor{};
+    mono_video_topic_param_desc.description = "Name of the topic to subscribe to for the monocular video feed";
+    this->declare_parameter<string>("mono_video_topic", "camera/image_raw", mono_video_topic_param_desc);
+
+    auto stereo_video_topic_param_desc = rcl_interfaces::msg::ParameterDescriptor{};
+    stereo_video_topic_param_desc.description = "Name of the topic to subscribe to for the stereo video feed";
+    this->declare_parameter<string>("stereo_video_topic", "vslam/combined", stereo_video_topic_param_desc);
 
     cv::namedWindow(OPENCV_WINDOW);
 
     rmw_qos_profile_t custom_qos = rmw_qos_profile_default;
-    image_sub_ = image_transport::create_subscription(
+    mono_image_sub_ = image_transport::create_subscription(
         this,
-        this->get_parameter("video_topic").as_string(),
+        this->get_parameter("mono_video_topic").as_string(),
         bind(&VSLAMSystemNode::imageCallback, this, placeholders::_1),
         "raw",
         custom_qos
+    );
+    stereo_image_sub_  = this->create_subscription<vslam::msg::StereoImage>(
+        this->get_parameter("stereo_video_topic").as_string(),
+        10,
+        bind(&VSLAMSystemNode::stereoCallback, this, placeholders::_1)
     );
 
     map_publisher_ = this->create_publisher<vslam::msg::Map>("vslam/map", 10);
@@ -185,10 +231,17 @@ class VSLAMSystemNode : public rclcpp::Node {
       return;
     }
 
+    ORB_SLAM3::System::eSensor sensor;
+    if (!this->get_parameter("stereo_video_topic").as_string().empty()) {
+      sensor = ORB_SLAM3::System::STEREO;
+    } else {
+      sensor = ORB_SLAM3::System::MONOCULAR;
+    }
+
     SLAM = new ORB_SLAM3::System(
       vocab_path,
       settings_path,
-      ORB_SLAM3::System::MONOCULAR,
+      sensor,
       this->get_parameter("display_visual").as_bool()
     );
 

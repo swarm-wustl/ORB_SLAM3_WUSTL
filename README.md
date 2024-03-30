@@ -24,7 +24,6 @@ These errors likely indicate an issue with the installation of ORB_SLAM3 or its 
 - `/usr/local/include/pangolin/gl/gl.hpp:335:5: error: ‘glCopyImageSubDataNV’ was not declared in this scope` (and similar Pangolin errors): First, ensure that you are building version 0.6 of Pangolin with `git checkout v0.6`. Then add the line `#include <limits>` to the top of `colour.h`. Remember that the Pangolin repo should be installed to `~/Dev/Pangolin`.
 - `libpango_windowing.so: cannot open shared object file: No such file or directory`. Run `sudo ldconfig` to configure dynamic linker runtime bindings.
 - `error while loading shared libraries: libORB_SLAM3.so: cannot open shared object file: No such file or directory`: Run the following command to update LD library: `export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/$(whoami)/Dev/ORB_SLAM3/lib`
-
 - `fatal error: sophus/s3.hpp: No such file or directory.` Run the following commands:
 ```
 cd ~/Dev/ORB_SLAM3/Thirdparty/Sophus

@@ -5,10 +5,7 @@
 
 #include "rclcpp/rclcpp.hpp"
 
-#include "sensor_msgs/msg/point_cloud2.hpp"
-#include "sensor_msgs/point_cloud2_iterator.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
-#include "vslam/msg/point_cloud_and_pose.hpp"
 #include "vslam/msg/map.hpp"
 #include "vslam/msg/map_point.hpp"
 #include "vslam/msg/key_frame.hpp"
@@ -50,7 +47,6 @@ vector<Point> bresenham(int x1, int y1, int x2, int y2) {
 
 class GridMapperNode : public rclcpp::Node {
   private:
-    rclcpp::Subscription<vslam::msg::PointCloudAndPose>::SharedPtr point_cloud_and_pose_sub_;
     rclcpp::Subscription<vslam::msg::Map>::SharedPtr map_sub_;
 
     cv::Mat img;
