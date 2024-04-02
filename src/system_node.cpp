@@ -62,6 +62,9 @@ class VSLAMSystemNode : public rclcpp::Node {
     vector<ORB_SLAM3::IMU::Point> imu_buffer;
     bool usingImu;
 
+    image_transport::Subscriber image_sub_;
+    rclcpp::Publisher<vslam::msg::Map>::SharedPtr map_publisher_;
+
     ORB_SLAM3::System* SLAM;
 
     void processKeyFrame(ORB_SLAM3::KeyFrame* keyframe, vslam::msg::Map::SharedPtr& map_msg) {
