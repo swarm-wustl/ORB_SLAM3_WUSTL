@@ -47,11 +47,15 @@ ament_target_dependencies(grid_mapper rclcpp std_msgs sensor_msgs geometry_msgs 
 add_executable(video_reader src/video_reader.cpp)
 ament_target_dependencies(video_reader rclcpp std_msgs sensor_msgs cv_bridge OpenCV)
 
+add_executable(stereo_combiner src/stereo_combiner.cpp)
+ament_target_dependencies(stereo_combiner rclcpp std_msgs sensor_msgs geometry_msgs image_transport cv_bridge OpenCV)
+
 # Custom messages, services, and actions
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/MapPoint.msg"
   "msg/KeyFrame.msg"
   "msg/Map.msg"
+  "msg/StereoImage.msg"
   DEPENDENCIES
   builtin_interfaces
   std_msgs
@@ -83,6 +87,7 @@ target_link_libraries(system
 
 target_link_libraries(grid_mapper ${cpp_typesupport_target})
 target_link_libraries(video_reader)
+target_link_libraries(stereo_combiner ${cpp_typesupport_target})
 
 set(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_RPATH}:~/ORB_SLAM3/Thirdparty/Pangolin/build")
 
@@ -96,6 +101,10 @@ install(TARGETS
 
 install(TARGETS
   video_reader
+  DESTINATION lib/${PROJECT_NAME})
+
+install(TARGETS
+  stereo_combiner
   DESTINATION lib/${PROJECT_NAME})
 
 ament_package()

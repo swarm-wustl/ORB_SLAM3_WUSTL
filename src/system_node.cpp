@@ -24,13 +24,13 @@
 
 using namespace std;
 
-void throttleCallback(const chrono::time_point<chrono::high_resolution_clock>& last_callback) {
+bool throttleCallback(const chrono::time_point<chrono::high_resolution_clock>& last_callback) {
   int FPS = 10;
   auto now = chrono::high_resolution_clock::now();
   if (now - last_callback < chrono::milliseconds(1000 / FPS)) {
-    return;
+    return true;
   }
-  return;
+  return false;
 }
 
 cv_bridge::CvImagePtr getImageFromMessage(const sensor_msgs::msg::Image::ConstSharedPtr &msg) {
@@ -61,9 +61,6 @@ class VSLAMSystemNode : public rclcpp::Node {
     // sensor_msgs::msg::Imu last_imu;
     vector<ORB_SLAM3::IMU::Point> imu_buffer;
     bool usingImu;
-
-    image_transport::Subscriber image_sub_;
-    rclcpp::Publisher<vslam::msg::Map>::SharedPtr map_publisher_;
 
     ORB_SLAM3::System* SLAM;
 
@@ -132,7 +129,7 @@ class VSLAMSystemNode : public rclcpp::Node {
     }
 
     void imageCallback(const sensor_msgs::msg::Image::ConstSharedPtr& msg) {
-      throttleCallback(last_callback);
+      if (throttleCallback(last_callback)) return;
 
       cv_bridge::CvImagePtr cv_ptr = getImageFromMessage(msg);
       if (!cv_ptr) {
@@ -152,7 +149,6 @@ class VSLAMSystemNode : public rclcpp::Node {
         } else {
           pose = SLAM->TrackMonocular(cv_ptr->image, tframe, imu_buffer);
         }
-        RCLCPP_INFO(this->get_logger(), "IMU buffer size: %d", imu_buffer.size());
         imu_buffer.clear();
       } else {
         pose = SLAM->TrackMonocular(cv_ptr->image, tframe);
@@ -165,7 +161,7 @@ class VSLAMSystemNode : public rclcpp::Node {
     }
 
     void stereoCallback(const vslam::msg::StereoImage::SharedPtr msg) {
-      throttleCallback(last_callback);
+      if (throttleCallback(last_callback)) return;
 
       cv_bridge::CvImagePtr cv_ptr_l;
       cv_bridge::CvImagePtr cv_ptr_r;
@@ -233,7 +229,8 @@ class VSLAMSystemNode : public rclcpp::Node {
 
     auto imu_topic_param_desc = rcl_interfaces::msg::ParameterDescriptor{};
     imu_topic_param_desc.description = "Name of the topic to subscribe to for the stereo video feed";
-    this->declare_parameter<string>("imu_topic", "imu_plugin/out", imu_topic_param_desc);
+    // this->declare_parameter<string>("imu_topic", "imu_plugin/out", imu_topic_param_desc);
+    this->declare_parameter<string>("imu_topic", "null", imu_topic_param_desc);
     usingImu = this->get_parameter("imu_topic").as_string() != "null";
 
     cv::namedWindow(OPENCV_WINDOW);

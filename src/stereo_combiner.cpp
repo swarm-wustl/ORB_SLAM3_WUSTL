@@ -29,8 +29,9 @@ cv_bridge::CvImagePtr getImageFromMessage(const sensor_msgs::msg::Image::ConstSh
 
 class StereoCombinerNode : public rclcpp::Node {
   private:
-    chrono::time_point<chrono::high_resolution_clock> last_left_callback;
-    chrono::time_point<chrono::high_resolution_clock> last_right_callback;
+    rclcpp::Clock shared_clock();
+    double last_left_callback;
+    double last_right_callback;
     image_transport::Subscriber left_image_sub_;
     image_transport::Subscriber right_image_sub_;
 
@@ -45,6 +46,12 @@ class StereoCombinerNode : public rclcpp::Node {
       }
 
       cv_ptr->image.empty(); // required to prevent segfault
+
+      // Check that images were received within 50ms of each other
+      if (this->now().seconds() - last_right_callback > 0.1) {
+        RCLCPP_WARN(this->get_logger(), "Received left image but right image was not received within 25ms");
+        return;
+      }
 
       vslam::msg::StereoImage::SharedPtr stereo_img_msg = std::make_shared<vslam::msg::StereoImage>();
       stereo_img_msg->header.stamp = this->now();
@@ -64,7 +71,7 @@ class StereoCombinerNode : public rclcpp::Node {
 
       cv_ptr->image.empty(); // required to prevent segfault
       last_right_img = cv_ptr->image.clone();
-      // last_right_callback = this->now();
+      last_right_callback = this->now().seconds();
     }
 
   public:
