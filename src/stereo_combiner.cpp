@@ -34,6 +34,7 @@ class StereoCombinerNode : public rclcpp::Node {
     double last_right_callback;
     image_transport::Subscriber left_image_sub_;
     image_transport::Subscriber right_image_sub_;
+    int allowed_latency;
 
     cv::Mat last_right_img;
     rclcpp::Publisher<vslam::msg::StereoImage>::SharedPtr stereo_image_pub_;
@@ -84,6 +85,11 @@ class StereoCombinerNode : public rclcpp::Node {
     auto right_video_topic_param_desc = rcl_interfaces::msg::ParameterDescriptor{};
     right_video_topic_param_desc.description = "Name of the topic to subscribe to for the right video feed";
     this->declare_parameter<string>("right_video_topic", "right_camera/image_raw", right_video_topic_param_desc);
+
+    auto allowed_latency_topic_param_desc = rcl_interfaces::msg::ParameterDescriptor{};
+    allowed_latency_topic_param_desc.description = "Allowed latency in ms between left and right camera feeds";
+    this->declare_parameter<int>("allowed_latency", 100, allowed_latency_topic_param_desc);
+    allowed_latency = this->get_parameter("allowed_latency").as_int();
 
     rmw_qos_profile_t custom_qos = rmw_qos_profile_default;
     left_image_sub_ = image_transport::create_subscription(

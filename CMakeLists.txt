@@ -12,6 +12,8 @@ find_package(nav_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
+find_package(tf2_ros REQUIRED)
+find_package(tf2_geometry_msgs REQUIRED)
 
 find_package(image_transport REQUIRED)
 find_package(cv_bridge REQUIRED)
@@ -42,7 +44,10 @@ add_executable(system src/system_node.cpp)
 ament_target_dependencies(system rclcpp std_msgs nav_msgs sensor_msgs image_transport cv_bridge OpenCV)
 
 add_executable(grid_mapper src/grid_mapper.cpp)
-ament_target_dependencies(grid_mapper rclcpp std_msgs sensor_msgs geometry_msgs OpenCV)
+ament_target_dependencies(grid_mapper rclcpp std_msgs sensor_msgs geometry_msgs nav_msgs OpenCV)
+
+add_executable(map_visualization_splitter src/map_visualization_splitter.cpp)
+ament_target_dependencies(map_visualization_splitter rclcpp std_msgs sensor_msgs geometry_msgs nav_msgs OpenCV tf2_ros tf2_geometry_msgs)
 
 add_executable(video_reader src/video_reader.cpp)
 ament_target_dependencies(video_reader rclcpp std_msgs sensor_msgs cv_bridge OpenCV)
@@ -86,6 +91,7 @@ target_link_libraries(system
 )
 
 target_link_libraries(grid_mapper ${cpp_typesupport_target})
+target_link_libraries(map_visualization_splitter ${cpp_typesupport_target})
 target_link_libraries(video_reader)
 target_link_libraries(stereo_combiner ${cpp_typesupport_target})
 
@@ -97,6 +103,10 @@ install(TARGETS
 
 install(TARGETS
   grid_mapper
+  DESTINATION lib/${PROJECT_NAME})
+
+install(TARGETS
+  map_visualization_splitter
   DESTINATION lib/${PROJECT_NAME})
 
 install(TARGETS

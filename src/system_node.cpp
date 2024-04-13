@@ -51,6 +51,7 @@ void processImage(cv::Mat& image) {
 class VSLAMSystemNode : public rclcpp::Node {
   private:
     const string OPENCV_WINDOW = "Camera Feed";
+    const int DIST_MULT = 5;
     chrono::time_point<chrono::high_resolution_clock> last_callback;
 
     image_transport::Subscriber mono_image_sub_;
@@ -70,9 +71,9 @@ class VSLAMSystemNode : public rclcpp::Node {
       Eigen::Quaternionf orientation = keyframe_pose.unit_quaternion();
       vslam::msg::KeyFrame keyframe_msg;
       keyframe_msg.id = keyframe->mnId;
-      keyframe_msg.pose.position.x = position.x();
-      keyframe_msg.pose.position.y = position.y();
-      keyframe_msg.pose.position.z = position.z();
+      keyframe_msg.pose.position.x = position.x() * DIST_MULT;
+      keyframe_msg.pose.position.y = position.y() * DIST_MULT;
+      keyframe_msg.pose.position.z = position.z() * DIST_MULT;
       keyframe_msg.pose.orientation.x = orientation.x();
       keyframe_msg.pose.orientation.y = orientation.y();
       keyframe_msg.pose.orientation.z = orientation.z();
@@ -86,32 +87,39 @@ class VSLAMSystemNode : public rclcpp::Node {
       map_msg->key_frames.push_back(keyframe_msg);
     }
 
-    void processMapPoint(ORB_SLAM3::MapPoint* map_point, vslam::msg::Map::SharedPtr& map_msg) {
+    void processMapPoint(ORB_SLAM3::MapPoint* map_point, vector<vslam::msg::MapPoint>& map_points) {
+      if (map_point == nullptr || map_point->isBad()) {
+        return;
+      }
       vslam::msg::MapPoint map_point_msg;
       Eigen::Vector3f position = map_point->GetWorldPos();
       map_point_msg.id = map_point->mnId;
-      map_point_msg.world_pos.x = position.x();
-      map_point_msg.world_pos.y = position.y();
-      map_point_msg.world_pos.z = position.z();
-      map_msg->map_points.push_back(map_point_msg);
+      map_point_msg.world_pos.x = position.x() * DIST_MULT;
+      map_point_msg.world_pos.y = position.y() * DIST_MULT;
+      map_point_msg.world_pos.z = position.z() * DIST_MULT;
+      map_points.push_back(map_point_msg);
     }
 
     void publishMap(const Sophus::SE3f& pose) {
+      Sophus::SE3f ipose = pose.inverse();
       ORB_SLAM3::Atlas* atlas = SLAM->GetAtlas();
       ORB_SLAM3::Map* map = atlas->GetCurrentMap();
       vector<ORB_SLAM3::KeyFrame*> keyframes = map->GetAllKeyFrames();
       vector<ORB_SLAM3::MapPoint*> all_map_points = map->GetAllMapPoints();
+      vector<ORB_SLAM3::MapPoint*> tracked_map_points = SLAM->GetTrackedMapPoints();
 
       vslam::msg::Map::SharedPtr map_msg = std::make_shared<vslam::msg::Map>();
       map_msg->header.stamp = this->now();
-      map_msg->header.frame_id = "map";
+      map_msg->header.frame_id = "/base_link";
       map_msg->id = map->GetId();
 
-      Eigen::Vector3f camera_position = pose.translation();
-      Eigen::Quaternionf camera_orientation = pose.unit_quaternion();
-      map_msg->camera_pose.position.x = camera_position.x();
-      map_msg->camera_pose.position.y = camera_position.y();
-      map_msg->camera_pose.position.z = camera_position.z();
+      // Set camera pose
+      Eigen::Vector3f camera_position = ipose.translation();
+      Eigen::Quaternionf camera_orientation = ipose.unit_quaternion();
+
+      map_msg->camera_pose.position.x = camera_position.x() * DIST_MULT;
+      map_msg->camera_pose.position.y = camera_position.y() * DIST_MULT;
+      map_msg->camera_pose.position.z = camera_position.z() * DIST_MULT;
       map_msg->camera_pose.orientation.x = camera_orientation.x();
       map_msg->camera_pose.orientation.y = camera_orientation.y();
       map_msg->camera_pose.orientation.z = camera_orientation.z();
@@ -122,8 +130,14 @@ class VSLAMSystemNode : public rclcpp::Node {
       }
 
       for (ORB_SLAM3::MapPoint* map_point : all_map_points) {
-        processMapPoint(map_point, map_msg);
+        processMapPoint(map_point, map_msg->map_points);
       }
+
+      RCLCPP_INFO(this->get_logger(), "Tracked map points: %d", tracked_map_points.size());
+      for (ORB_SLAM3::MapPoint* map_point : tracked_map_points) {
+        processMapPoint(map_point, map_msg->tracked_map_points);
+      }
+      RCLCPP_INFO(this->get_logger(), "Tracked map points: %d", map_msg->tracked_map_points.size());
 
       map_publisher_->publish(*map_msg);
     }
@@ -224,8 +238,8 @@ class VSLAMSystemNode : public rclcpp::Node {
 
     auto stereo_video_topic_param_desc = rcl_interfaces::msg::ParameterDescriptor{};
     stereo_video_topic_param_desc.description = "Name of the topic to subscribe to for the stereo video feed";
-    // this->declare_parameter<string>("stereo_video_topic", "vslam/combined", stereo_video_topic_param_desc);
-    this->declare_parameter<string>("stereo_video_topic", "null", stereo_video_topic_param_desc);
+    this->declare_parameter<string>("stereo_video_topic", "vslam/combined", stereo_video_topic_param_desc);
+    // this->declare_parameter<string>("stereo_video_topic", "null", stereo_video_topic_param_desc);
 
     auto imu_topic_param_desc = rcl_interfaces::msg::ParameterDescriptor{};
     imu_topic_param_desc.description = "Name of the topic to subscribe to for the stereo video feed";
@@ -236,23 +250,31 @@ class VSLAMSystemNode : public rclcpp::Node {
     cv::namedWindow(OPENCV_WINDOW);
 
     rmw_qos_profile_t custom_qos = rmw_qos_profile_default;
-    mono_image_sub_ = image_transport::create_subscription(
-        this,
-        this->get_parameter("mono_video_topic").as_string(),
-        bind(&VSLAMSystemNode::imageCallback, this, placeholders::_1),
-        "raw",
-        custom_qos
-    );
-    stereo_image_sub_  = this->create_subscription<vslam::msg::StereoImage>(
-        this->get_parameter("stereo_video_topic").as_string(),
-        10,
-        bind(&VSLAMSystemNode::stereoCallback, this, placeholders::_1)
-    );
-    imu_sub_ = this->create_subscription<sensor_msgs::msg::Imu>(
-        this->get_parameter("imu_topic").as_string(),
-        10,
-        bind(&VSLAMSystemNode::imuCallback, this, placeholders::_1)
-    );
+    string mono_video_topic = this->get_parameter("mono_video_topic").as_string();
+    string stereo_video_topic = this->get_parameter("stereo_video_topic").as_string();
+
+    if (mono_video_topic != "null") {
+      mono_image_sub_ = image_transport::create_subscription(
+          this,
+          mono_video_topic,
+          bind(&VSLAMSystemNode::imageCallback, this, placeholders::_1),
+          "raw",
+          custom_qos
+      );
+    } else {
+      stereo_image_sub_  = this->create_subscription<vslam::msg::StereoImage>(
+          stereo_video_topic,
+          10,
+          bind(&VSLAMSystemNode::stereoCallback, this, placeholders::_1)
+      );
+    }
+    if (usingImu) {
+      imu_sub_ = this->create_subscription<sensor_msgs::msg::Imu>(
+          this->get_parameter("imu_topic").as_string(),
+          10,
+          bind(&VSLAMSystemNode::imuCallback, this, placeholders::_1)
+      );
+    }
 
     map_publisher_ = this->create_publisher<vslam::msg::Map>("vslam/map", 10);
 
@@ -282,7 +304,7 @@ class VSLAMSystemNode : public rclcpp::Node {
       this->get_parameter("display_visual").as_bool()
     );
 
-    RCLCPP_INFO(this->get_logger(), "VSLAMSystemNode initialized");
+    RCLCPP_INFO(this->get_logger(), "VSLAMSystemNode initialized. Using stereo: %d. Using IMU: %d", stereo_video_topic != "null", usingImu);
   }
 
     ~VSLAMSystemNode()

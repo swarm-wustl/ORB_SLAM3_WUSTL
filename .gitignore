@@ -2,6 +2,7 @@
 build/
 ORB_SLAM3/include/Thirdparty/
 settings/ORBvoc.txt
+ORBvoc.txt
 
 # === Original ORB SLAM 3 .gitignore with path modifications ===
 # Ignore all
