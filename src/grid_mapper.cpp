@@ -76,9 +76,8 @@ class GridMapperNode : public rclcpp::Node {
     rclcpp::Publisher<nav_msgs::msg::OccupancyGrid>::SharedPtr grid_pub_;
 
     cv::Mat img;
-    vector<vector<GridCell>> grid_map;
-
-    int n_prev_keyframes = 0;
+    cv::Mat grid_map_occ;
+    cv::Mat grid_map_vis;
 
     int GRID_SIZE_CM;
     int GRID_RESOLUTION_CM;
@@ -111,70 +110,32 @@ class GridMapperNode : public rclcpp::Node {
           continue;
         }
         Point map_point_grid_point = xzToGrid(map_point.world_pos.x, map_point.world_pos.z);
-        // int dx = map_point_grid_point.x - robot_grid_point.x;
-        // int dy = map_point_grid_point.y - robot_grid_point.y; 
-        // if (dx*dx + dy*dy > 250) {
-        //   continue;
-        // }
-        if (map_point_grid_point.x >= GRID_SIZE - 5 || map_point_grid_point.x < 0 || map_point_grid_point.y >= GRID_SIZE - 5 || map_point_grid_point.y < 0) {
+        if (
+            map_point_grid_point.x >= GRID_SIZE - 5 ||
+            map_point_grid_point.x < 5 ||
+            map_point_grid_point.y >= GRID_SIZE - 5 ||
+            map_point_grid_point.y < 5 ||
+            robot_grid_point.x >= GRID_SIZE - 5 ||
+            robot_grid_point.x < 5 ||
+            robot_grid_point.y >= GRID_SIZE - 5 ||
+            robot_grid_point.y < 5
+        ) {
           continue;
         }
 
+        // RCLCPP_INFO(this->get_logger(), "Robot: %d %d, Map: %d %d", robot_grid_point.x, robot_grid_point.y, map_point_grid_point.x, map_point_grid_point.y);
         vector<Point> visited_points = bresenham(robot_grid_point.x, robot_grid_point.y, map_point_grid_point.x, map_point_grid_point.y);
-        RCLCPP_INFO(this->get_logger(), "Casting from (%d, %d) -> (%d, %d)", robot_grid_point.x, robot_grid_point.y, map_point_grid_point.x, map_point_grid_point.y);
         for (const auto& point : visited_points) {
-          grid_map[point.x][point.y].nVisited++;
-          // RCLCPP_INFO(this->get_logger(), "Map point at (%d, %d)", point.x, point.y);
+          grid_map_vis.at<int>(point.x, point.y)++;
         }
-        grid_map[map_point_grid_point.x][map_point_grid_point.y].nOccupied++;
-        grid_map[map_point_grid_point.x][map_point_grid_point.y].nVisited++;
-        // grid_map[robot_grid_point.x][robot_grid_point.y].nVisited++;
+        grid_map_occ.at<int>(map_point_grid_point.x, map_point_grid_point.y) += 3;
+        grid_map_vis.at<int>(map_point_grid_point.x, map_point_grid_point.y) += 3;
       }
-      
-      // for (int i = 0; i < GRID_SIZE; i++) {
-      //   for (int j = 0; j < GRID_SIZE; j++) {
-      //     grid_map[i][j] = (i + j) % 2 == 0 ? GridCell{0, 0} : GridCell{100, 100};
-      //   }
-      // }
-
-      // Create a map for quick lookup of map points by their IDs
-      // unordered_map<int, vslam::msg::MapPoint> map_points_map;
-      // for (const auto& map_point : map_points) {
-      //   map_points_map[map_point.id] = map_point;
-      // }
-      //
-      // for (const auto& key_frame : key_frames) {
-      //   // Calculate grid point for key frame once
-      //   Point key_frame_grid_point = xzToGrid(key_frame.pose.position.x, key_frame.pose.position.z);
-      //
-      //   // Update grid map by drawing lines between key frame and its map points
-      //   for (auto map_point_id : key_frame.map_point_ids) {
-      //     auto it = map_points_map.find(map_point_id);
-      //     if (it != map_points_map.end()) {
-      //       const auto& map_point = it->second;
-      //       // Calculate grid point for map point once
-      //       Point map_point_grid_point = xzToGrid(map_point.world_pos.x, map_point.world_pos.z);
-      //
-      //       // Check if points are outside the grid map
-      //       if (key_frame_grid_point.x >= GRID_SIZE || key_frame_grid_point.y >= GRID_SIZE || 
-      //           map_point_grid_point.x >= GRID_SIZE || map_point_grid_point.y >= GRID_SIZE) {
-      //         continue;
-      //       }
-      //
-      //       // Calculate Bresenham line only for points inside the grid map
-      //       vector<Point> visited_points = bresenham(key_frame_grid_point.x, key_frame_grid_point.y, map_point_grid_point.x, map_point_grid_point.y);
-      //       for (const auto& point : visited_points) {
-      //         grid_map[point.x][point.y].nVisited++;
-      //       }
-      //       grid_map[map_point_grid_point.x][map_point_grid_point.y].nOccupied++;
-      //     }
-      //   }
-      // }
     }
 
     void display_grid_map(geometry_msgs::msg::Pose pose) {
       img.setTo(cv::Scalar(255, 255, 255));
-      int grid_size = grid_map.size();
+      int grid_size = GRID_SIZE;
       Point pose_grid_point = xzToGrid(pose.position.x, pose.position.z);
 
       for (int i = 0; i < grid_size; i++) {
@@ -185,7 +146,8 @@ class GridMapperNode : public rclcpp::Node {
           if (i == pose_grid_point.x && j == pose_grid_point.y) {
             color = cv::Scalar(0, 0, 255);
           } else {
-            GridCell cell = grid_map[i][j];
+            // GridCell cell = grid_map[i][j];
+            GridCell cell = {grid_map_occ.at<int>(i, j), grid_map_vis.at<int>(i, j)};
             // Calculate color value based on occupancy
             int color_value = (1 - ((float)cell.nOccupied / (cell.nVisited*0.1 + 1))) * 255;
 
@@ -204,6 +166,13 @@ class GridMapperNode : public rclcpp::Node {
     }
 
     void publish_occupancy_map() {
+      // Apply a Gaussian blur to the grid map
+      cv::Mat processed_occ;
+      cv::Mat processed_vis;
+      cv::GaussianBlur(grid_map_occ, processed_occ, cv::Size(5, 5), 0);
+      cv::GaussianBlur(grid_map_vis, processed_vis, cv::Size(5, 5), 0);
+
+      // Publish occupancy grid map
       nav_msgs::msg::OccupancyGrid grid_msg;
       grid_msg.header.stamp = this->now();
       grid_msg.header.frame_id = "/odom";
@@ -212,8 +181,6 @@ class GridMapperNode : public rclcpp::Node {
       grid_msg.info.height = GRID_SIZE;
       grid_msg.info.origin.position.x = MAX_XZ/4 + 0.5;
       grid_msg.info.origin.position.y = -MAX_XZ/4 - 0.5;
-      // grid_msg.info.origin.position.x = 0;
-      // grid_msg.info.origin.position.y = 0;
       grid_msg.info.origin.position.z = 0;
       grid_msg.info.origin.orientation.x = 0;
       grid_msg.info.origin.orientation.y = 0;
@@ -223,15 +190,9 @@ class GridMapperNode : public rclcpp::Node {
       vector<int8_t> data;
       for (int i = 0; i < GRID_SIZE; i++) {
         for (int j = 0; j < GRID_SIZE; j++) {
-          GridCell cell = grid_map[GRID_SIZE - 1 - i][j];
-          int8_t occupancy = cell.nVisited < DISPLAY_GRID_MIN ? -1 : min((1 - ((float)cell.nOccupied / cell.nVisited)) * 50, 90.f);
-          if (occupancy != -1) {
-            RCLCPP_INFO(this->get_logger(), "Occupancy at (%d, %d): %d", i, j, occupancy);
-          }
-          // int8_t occupancy = (i + j) % 200;
-          // if (occupancy > 0) {
-          //   RCLCPP_INFO(this->get_logger(), "Occupancy at (%d, %d): %d", i, j, occupancy);
-          // }
+          // GridCell cell = grid_map[GRID_SIZE - 1 - i][j];
+          GridCell cell = {processed_occ.at<int>(GRID_SIZE - 1 - i, j), processed_vis.at<int>(GRID_SIZE - 1 - i, j)};
+          int8_t occupancy = cell.nVisited < DISPLAY_GRID_MIN ? -1 : min((1 - ((float)cell.nOccupied / cell.nVisited)) * 100, 90.f);
           data.push_back(occupancy);
         }
       }
@@ -241,18 +202,11 @@ class GridMapperNode : public rclcpp::Node {
 
     void map_callback(const vslam::msg::Map::SharedPtr msg)
     {
-      RCLCPP_INFO(this->get_logger(), "Received map with %d map points and %d key frames", msg->map_points.size(), msg->key_frames.size());
       vector<vslam::msg::MapPoint> map_points = msg->map_points;
       vector<vslam::msg::MapPoint> tracked_map_points = msg->tracked_map_points;
       vector<vslam::msg::KeyFrame> key_frames = msg->key_frames;
       geometry_msgs::msg::Pose pose = msg->camera_pose;
       
-      int n_keyframes = key_frames.size();
-      // if (n_keyframes == n_prev_keyframes) {
-      //   return;
-      // }
-      n_prev_keyframes = n_keyframes;
-
       update_grid_map(pose, map_points, tracked_map_points, key_frames);
       publish_occupancy_map();
 
@@ -309,12 +263,8 @@ class GridMapperNode : public rclcpp::Node {
     img = cv::Mat::zeros(IMG_SIZE, IMG_SIZE, CV_8UC3);
 
     // Initialize grid map
-    grid_map.resize(GRID_SIZE, vector<GridCell>(GRID_SIZE, {0, 0}));
-    for (int i = 0; i < GRID_SIZE; i++) {
-      for (int j = 0; j < GRID_SIZE; j++) {
-        grid_map[i][j] = {0, 0};
-      }
-    }
+    grid_map_occ = cv::Mat::zeros(GRID_SIZE, GRID_SIZE, CV_16U);
+    grid_map_vis = cv::Mat::zeros(GRID_SIZE, GRID_SIZE, CV_16U);
 
     grid_pub_ = this->create_publisher<nav_msgs::msg::OccupancyGrid>("grid_map", 10);
 

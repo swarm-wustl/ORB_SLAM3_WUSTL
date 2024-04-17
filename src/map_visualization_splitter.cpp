@@ -38,7 +38,6 @@ class MapVisualizationSplitter : public rclcpp::Node {
       vector<vslam::msg::MapPoint> map_points = msg->map_points;
       vector<vslam::msg::MapPoint> tracked_points = msg->tracked_map_points;
       vector<vslam::msg::KeyFrame> key_frames = msg->key_frames;
-      RCLCPP_INFO(this->get_logger(), "Received map with %d map points and %d key frames", map_points.size(), key_frames.size());
 
       // Visualize camera pose
       geometry_msgs::msg::Pose pose = msg->camera_pose;

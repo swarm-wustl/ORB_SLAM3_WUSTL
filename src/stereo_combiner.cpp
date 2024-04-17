@@ -50,7 +50,7 @@ class StereoCombinerNode : public rclcpp::Node {
 
       // Check that images were received within 50ms of each other
       if (this->now().seconds() - last_right_callback > 0.1) {
-        RCLCPP_WARN(this->get_logger(), "Received left image but right image was not received within 25ms");
+        RCLCPP_WARN(this->get_logger(), "Received left image but right image was not received within 100ms");
         return;
       }
 
@@ -59,8 +59,6 @@ class StereoCombinerNode : public rclcpp::Node {
       stereo_img_msg->left_image = *cv_bridge::CvImage(std_msgs::msg::Header(), "bgr8", cv_ptr->image).toImageMsg();
       stereo_img_msg->right_image = *cv_bridge::CvImage(std_msgs::msg::Header(), "bgr8", last_right_img).toImageMsg();
       stereo_image_pub_->publish(*stereo_img_msg);
-
-      RCLCPP_INFO(this->get_logger(), "Published stereo image");
     }
 
     void rightImageCallback(const sensor_msgs::msg::Image::ConstSharedPtr& msg) {

@@ -133,11 +133,9 @@ class VSLAMSystemNode : public rclcpp::Node {
         processMapPoint(map_point, map_msg->map_points);
       }
 
-      RCLCPP_INFO(this->get_logger(), "Tracked map points: %d", tracked_map_points.size());
       for (ORB_SLAM3::MapPoint* map_point : tracked_map_points) {
         processMapPoint(map_point, map_msg->tracked_map_points);
       }
-      RCLCPP_INFO(this->get_logger(), "Tracked map points: %d", map_msg->tracked_map_points.size());
 
       map_publisher_->publish(*map_msg);
     }
@@ -175,7 +173,8 @@ class VSLAMSystemNode : public rclcpp::Node {
     }
 
     void stereoCallback(const vslam::msg::StereoImage::SharedPtr msg) {
-      if (throttleCallback(last_callback)) return;
+      // if (throttleCallback(last_callback)) return;
+      RCLCPP_INFO(this->get_logger(), "Received stereo image");
 
       cv_bridge::CvImagePtr cv_ptr_l;
       cv_bridge::CvImagePtr cv_ptr_r;
@@ -192,8 +191,6 @@ class VSLAMSystemNode : public rclcpp::Node {
 
       processImage(cv_ptr_l->image);
       processImage(cv_ptr_r->image);
-
-      RCLCPP_INFO(this->get_logger(), "%d, %d", cv_ptr_l->image.rows, cv_ptr_r->image.rows);
 
       double tframe = msg->header.stamp.sec + msg->header.stamp.nanosec / 1000000000.0;
       Sophus::SE3f pose = SLAM->TrackStereo(cv_ptr_l->image, cv_ptr_r->image, tframe);
@@ -239,7 +236,6 @@ class VSLAMSystemNode : public rclcpp::Node {
     auto stereo_video_topic_param_desc = rcl_interfaces::msg::ParameterDescriptor{};
     stereo_video_topic_param_desc.description = "Name of the topic to subscribe to for the stereo video feed";
     this->declare_parameter<string>("stereo_video_topic", "vslam/combined", stereo_video_topic_param_desc);
-    // this->declare_parameter<string>("stereo_video_topic", "null", stereo_video_topic_param_desc);
 
     auto imu_topic_param_desc = rcl_interfaces::msg::ParameterDescriptor{};
     imu_topic_param_desc.description = "Name of the topic to subscribe to for the stereo video feed";
@@ -254,6 +250,7 @@ class VSLAMSystemNode : public rclcpp::Node {
     string stereo_video_topic = this->get_parameter("stereo_video_topic").as_string();
 
     if (mono_video_topic != "null") {
+      RCLCPP_INFO(this->get_logger(), "Subscribing to monocular video feed at %s", mono_video_topic.c_str());
       mono_image_sub_ = image_transport::create_subscription(
           this,
           mono_video_topic,
@@ -262,6 +259,7 @@ class VSLAMSystemNode : public rclcpp::Node {
           custom_qos
       );
     } else {
+      RCLCPP_INFO(this->get_logger(), "Subscribing to stereo video feed at %s", stereo_video_topic.c_str());
       stereo_image_sub_  = this->create_subscription<vslam::msg::StereoImage>(
           stereo_video_topic,
           10,
@@ -269,6 +267,7 @@ class VSLAMSystemNode : public rclcpp::Node {
       );
     }
     if (usingImu) {
+      RCLCPP_INFO(this->get_logger(), "Subscribing to IMU feed at %s", this->get_parameter("imu_topic").as_string().c_str());
       imu_sub_ = this->create_subscription<sensor_msgs::msg::Imu>(
           this->get_parameter("imu_topic").as_string(),
           10,
